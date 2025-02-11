@@ -95,7 +95,7 @@ class RL_Trainer(object):
         # init vars at beginning of training
         self.total_envsteps = 0
         self.start_time = time.time()
-
+        
         for itr in range(n_iter):
             print("\n\n********** Iteration %i ************"%itr)
 
@@ -170,8 +170,11 @@ class RL_Trainer(object):
         # HINT: depending on if it's the first iteration or not, decide whether to either
         # (1) load the data. In this case you can directly return as follows
         # ``` return loaded_paths, 0, None ```
-        if iter == 0:
-            return load_initial_expertdata, 0, None
+       
+        if itr == 0:
+            with open(load_initial_expertdata, "rb") as f:
+                loaded_paths = pickle.load(f)
+            return loaded_paths, 0, None
         
         # (2) collect `self.params['batch_size']` transitions
 
@@ -179,8 +182,9 @@ class RL_Trainer(object):
         # HINT1: use sample_trajectories from utils
         # HINT2: you want each of these collected rollouts to be of length self.params['ep_len']
         print("\nCollecting data to be used for training...")
-        paths, envsteps_this_batch = utils.sample_trajectories(self.env, collect_policy, self.params['batch_size'], self.params['ep_len'])
 
+        paths, envsteps_this_batch = utils.sample_trajectories(self.env, collect_policy, batch_size, self.params['ep_len'])
+        
         # collect more rollouts with the same policy, to be saved as videos in tensorboard
         # note: here, we collect MAX_NVIDEO rollouts, each of length MAX_VIDEO_LEN
         train_video_paths = None
@@ -215,14 +219,15 @@ class RL_Trainer(object):
         # TODO relabel collected obsevations (from our policy) with labels from an expert policy
         # HINT: query the policy (using the get_action function) with paths[i]["observation"]
         # and replace paths[i]["action"] with these expert labels
-  
+        
+        for i in range(len(paths)):
+            paths[i]["action"] = expert_policy.get_action(paths[i]["observation"])
         return paths
 
     ####################################
     ####################################
 
     def perform_logging(self, itr, paths, eval_policy, train_video_paths, training_logs):
-
         # collect eval trajectories, for logging
         print("\nCollecting data for eval...")
         eval_paths, eval_envsteps_this_batch = utils.sample_trajectories(self.env, eval_policy, self.params['eval_batch_size'], self.params['ep_len'])
