@@ -44,10 +44,13 @@ class PGAgent(BaseAgent):
         # return the train_log obtained from updating the policy
 
         # HINT1: use helper functions to compute qvals and advantages
+        q_vals = self.calculate_q_vals(rewards_list)
+        advantage =  self.estimate_advantage(observations, rewards_list, q_vals, terminals)
+        
         # HINT2: look at the MLPPolicyPG class for how to update the policy
-            # and obtain a train_log
+            # and obtain a train_log        
 
-        raise NotImplementedError
+        train_log = self.actor.update(observations, actions, advantage, q_vals)  
 
         return train_log
 
@@ -72,17 +75,19 @@ class PGAgent(BaseAgent):
         # Estimate Q^{pi}(s_t, a_t) by the total discounted reward summed over entire trajectory
         # HINT3: q_values should be a 1D numpy array where the indices correspond to the same
         # ordering as observations, actions, etc.
-
+        q_values = []
         if not self.reward_to_go:
             #use the whole traj for each timestep
-            raise NotImplementedError
+            for traj in rewards_list:
+                q_values.extend(self._discounted_return(traj))
 
         # Case 2: reward-to-go PG
         # Estimate Q^{pi}(s_t, a_t) by the discounted sum of rewards starting from t
         else:
-            raise NotImplementedError
+            for traj in rewards_list:
+                q_values.extend(self._discounted_cumsum(traj))
 
-        return q_values  # return an array
+        return np.array(q_values)  # return an array
 
     def estimate_advantage(self, obs, rewards_list, q_values, terminals):
 
@@ -143,9 +148,9 @@ class PGAgent(BaseAgent):
         if self.standardize_advantages:
             ## TODO: standardize the advantages to have a mean of zero
             ## and a standard deviation of one
-
-            raise NotImplementedError
-            advantages = TODO
+            mean = advantages.mean()
+            std = advantages.std()
+            advantages = normalize(advantages, mean, std)
 
         return advantages
 
@@ -172,8 +177,14 @@ class PGAgent(BaseAgent):
         """
 
         # TODO: create discounted_returns
-        raise NotImplementedError
-
+        # this basically weights all the steps taken to be the same (it says the total discounted reward is the value of each step)
+        T = len(rewards)
+        discounted_returns = np.zeros(T)
+        for t in range(T):
+            total = 0
+            for t_prime in range(T):
+                total += (self.gamma ** t_prime) * rewards[t_prime]
+            discounted_returns[t] = total
         return discounted_returns
 
     def _discounted_cumsum(self, rewards):
@@ -186,6 +197,13 @@ class PGAgent(BaseAgent):
         # TODO: create `discounted_cumsums`
         # HINT: it is possible to write a vectorized solution, but a solution
             # using a for loop is also fine
-        raise NotImplementedError
-
+        # this basically takes into account how far you are from the first timestep (it says the discounted reward is different at each time step -> basically less the further you get from the first timestep) 
+        T = len(rewards)
+        discounted_cumsums = np.zeros(T)
+        for t in range(T):
+            total = 0
+            # Subtle difference, for this one we start at t
+            for t_prime in range(t, T):
+                total += (self.gamma ** t_prime) * rewards[t_prime]
+            discounted_cumsums[t] = total
         return discounted_cumsums

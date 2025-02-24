@@ -94,9 +94,10 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
             observation = obs[None]
 
         # TODO return the action that the policy prescribes
-        obs_tensor = torch.Tensor(observation)
-        logits = self.forward(obs_tensor).detach().numpy()
-        return logits
+        obs_tensor = ptu.from_numpy(observation)
+        action_dist = self.forward(obs_tensor)
+        action = action_dist.sample()
+        return ptu.to_numpy(action)
 
     # update/train this policy
     def update(self, observations, actions, **kwargs):
@@ -110,15 +111,19 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
     # `torch.distributions.Distribution` object. It's up to you!
     def forward(self, observation: torch.FloatTensor):
         # TODO: get this from hw1
-        model = self.logits_na or self.mean_net
-        return model(observation)
-
+        if self.discrete:
+            # for discrete space, take logit and return the most likley action
+            logits = self.logits_na(observation)
+            return distributions.Categorical(logits=logits)
+        else:
+            mean = self.mean_net(observation)
+            std = torch.exp(self.logstd)
+            return distributions.Normal(mean, std)
 #####################################################
 #####################################################
 
 class MLPPolicyPG(MLPPolicy):
     def __init__(self, ac_dim, ob_dim, n_layers, size, **kwargs):
-
         super().__init__(ac_dim, ob_dim, n_layers, size, **kwargs)
         self.baseline_loss = nn.MSELoss()
 
@@ -137,7 +142,15 @@ class MLPPolicyPG(MLPPolicy):
         # HINT4: use self.optimizer to optimize the loss. Remember to
             # 'zero_grad' first
 
-        raise NotImplementedError
+
+        pred_acts = self.forward(observations)
+        
+        log_probs = pred_acts.log_prob(actions) # use log probs of output (essentially, using our prob model see how likley the sampled action is to be taken)
+        policy_loss = -(log_probs * advantages) # we want to maximize this function (so take negative)
+        policy_loss = policy_loss.mean() # take avg of return
+        self.optimizer.zero_grad()  # Clear previous gradients
+        policy_loss.backward()  # Compute gradients
+        self.optimizer.step()  # Update weights
 
         if self.nn_baseline:
             ## TODO: update the neural network baseline using the q_values as
