@@ -1,6 +1,7 @@
 import numpy as np
 import time
 import copy
+from multiprocessing import Pool
 
 ############################################
 ############################################
@@ -112,6 +113,32 @@ def sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, r
         trajec = sample_trajectory(env, policy, max_path_length, render, render_mode)
         timesteps_this_batch += get_pathlength(trajec)
         paths.append(trajec)
+    
+    return paths, timesteps_this_batch
+
+
+# helper to execute a trajectory 
+def collect_trajectory(i, env, policy, max_path_length, render, render_mode):
+    return sample_trajectory(env, policy, max_path_length, render, render_mode)
+    
+def parallelized_sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, render=False, render_mode=('rgb_array')):
+    """
+    Collect rollouts in parallel until we have collected min_timesteps_per_batch steps.
+    Bonus
+    """
+    paths = []
+    timesteps_this_batch = 0
+    
+    # create multiple workers 
+    with Pool() as pool:
+        # 
+        while timesteps_this_batch < min_timesteps_per_batch:
+            # run a multiple trajectories simulataneously 
+            full_traj_needed = (min_timesteps_per_batch // max_path_length) # number of full trajectories needed to reach stopping criteria 
+            
+            new_paths = pool.starmap(collect_trajectory, [[i, env, policy, max_path_length, render, render_mode] for i in range(full_traj_needed)]) # ex: min_steps = 10,000, max_ep_steps (max_path_length) = 1,000, full trajeect = 10 -> so run 10 trajectories in parallel (since you know each one will at most be at most 1k steps)
+            paths.extend(new_paths)
+            timesteps_this_batch += sum([get_pathlength(p) for p in new_paths])
     
     return paths, timesteps_this_batch
 
