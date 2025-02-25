@@ -97,8 +97,8 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         obs_tensor = ptu.from_numpy(observation)
         action_dist = self.forward(obs_tensor)
         action = action_dist.sample()
+        
         return ptu.to_numpy(action)
-
     # update/train this policy
     def update(self, observations, actions, **kwargs):
         # this raise should be left alone as it is a base class for PG
@@ -143,25 +143,42 @@ class MLPPolicyPG(MLPPolicy):
             # 'zero_grad' first
 
 
-        pred_acts = self.forward(observations)
-        
-        log_probs = pred_acts.log_prob(actions) # use log probs of output (essentially, using our prob model see how likley the sampled action is to be taken)
-        policy_loss = -(log_probs * advantages) # we want to maximize this function (so take negative)
-        policy_loss = policy_loss.mean() # take avg of return
-        self.optimizer.zero_grad()  # Clear previous gradients
-        policy_loss.backward()  # Compute gradients
-        self.optimizer.step()  # Update weights
+        # Get Log probs 
+        pred_acts = self.forward(observations)  # Get the action distribution
+        log_probs = pred_acts.log_prob(actions)  # Compute log probabilities of taken actions
+
+        # If multi-dim action, sum over action dimensions 
+        if len(log_probs.shape) > 1:
+            log_probs = log_probs.sum(dim=-1)  # Log space this is the equivalent of multiplying the independent probs. Ex: prob of action 1 * prob of action 2
+
+        policy_loss = -(log_probs * advantages).mean()  # Compute loss (take mean like in equation)
+        self.optimizer.zero_grad()  
+        policy_loss.backward()  
+        self.optimizer.step() 
+
 
         if self.nn_baseline:
             ## TODO: update the neural network baseline using the q_values as
             ## targets. The q_values should first be normalized to have a mean
             ## of zero and a standard deviation of one.
 
+            # in this function we are essentiall trying to predict the q_values (we do this to reduce variance)
+            q_values = normalize(q_values, q_values.mean(), q_values.std())
+            
             ## HINT1: use self.baseline_optimizer to optimize the loss used for
                 ## updating the baseline. Remember to 'zero_grad' first
+            
             ## HINT2: You will need to convert the targets into a tensor using
                 ## ptu.from_numpy before using it in the loss
-            raise NotImplementedError
+            q_val_tensor = ptu.from_numpy(q_values)
+            baseline_pred = self.baseline(observations)
+            baseline_pred = baseline_pred.reshape(-1) # make sure the tensors are same shape
+            base_loss = self.baseline_loss(baseline_pred, q_val_tensor)
+
+            # Update baseline using baseline loss 
+            self.baseline_optimizer.zero_grad()
+            base_loss.backward()
+            self.baseline_optimizer.step()
 
         train_log = {
             'Training Loss': ptu.to_numpy(policy_loss),
