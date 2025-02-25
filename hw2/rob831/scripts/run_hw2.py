@@ -80,6 +80,7 @@ def main():
     parser.add_argument('--which_gpu', '-gpu_id', default=0)
     parser.add_argument('--video_log_freq', type=int, default=-1)
     parser.add_argument('--scalar_log_freq', type=int, default=1)
+    parser.add_argument('--parallel', '-p', action='store_true') # student added: for running in collect trajectories parallel 
 
     parser.add_argument('--save_params', action='store_true')
     parser.add_argument('--action_noise_std', type=float, default=0)
