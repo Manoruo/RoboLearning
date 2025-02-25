@@ -49,7 +49,7 @@ class PGAgent(BaseAgent):
         
         # HINT2: look at the MLPPolicyPG class for how to update the policy
             # and obtain a train_log        
-
+ 
         train_log = self.actor.update(observations, actions, advantage, q_vals)  
 
         return train_log
@@ -107,9 +107,9 @@ class PGAgent(BaseAgent):
                 ## that the predictions have the same mean and standard deviation as
                 ## the current batch of q_values
 
-            raise NotImplementedError
-            values = TODO
-
+            
+            values = values_normalized.copy()
+            
             if self.gae_lambda is not None:
                 ## append a dummy T+1 value for simpler recursive calculation
                 values = np.append(values, [0])
@@ -130,7 +130,10 @@ class PGAgent(BaseAgent):
                         ## 0 otherwise.
                     ## HINT 2: self.gae_lambda is the lambda value in the
                         ## GAE formula
-                    raise NotImplementedError
+                    delta = rewards[i] + self.gamma * values[i + 1] * (1 - terminals[i]) - values[i] # use terminals for edge case (1 means end 0 means not)
+                    
+                    # GAE formula
+                    advantages[i] = delta + self.gamma * self.gae_lambda * (1 - terminals[i]) * advantages[i + 1]
 
                 # remove dummy advantage
                 advantages = advantages[:-1]
@@ -138,7 +141,7 @@ class PGAgent(BaseAgent):
             else:
                 ## TODO: compute advantage estimates using q_values, and values as baselines
                 # raise NotImplementedError
-                advantages = TODO
+                advantages = q_values - values_normalized 
 
         # Else, just set the advantage to [Q]
         else:
@@ -148,8 +151,8 @@ class PGAgent(BaseAgent):
         if self.standardize_advantages:
             ## TODO: standardize the advantages to have a mean of zero
             ## and a standard deviation of one
-            mean = advantages.mean()
-            std = advantages.std()
+            mean = np.mean(advantages)
+            std = np.std(advantages)
             advantages = normalize(advantages, mean, std)
 
         return advantages
@@ -180,11 +183,10 @@ class PGAgent(BaseAgent):
         # this basically weights all the steps taken to be the same (it says the total discounted reward is the value of each step)
         T = len(rewards)
         discounted_returns = np.zeros(T)
-        for t in range(T):
-            total = 0
-            for t_prime in range(T):
-                total += (self.gamma ** t_prime) * rewards[t_prime]
-            discounted_returns[t] = total
+        total = 0
+        for t_prime in range(T):
+            total += (self.gamma ** t_prime) * rewards[t_prime]  # Fix exponent issue
+        discounted_returns[:] = total  # Assign the same total return to all timesteps
         return discounted_returns
 
     def _discounted_cumsum(self, rewards):
@@ -204,6 +206,6 @@ class PGAgent(BaseAgent):
             total = 0
             # Subtle difference, for this one we start at t
             for t_prime in range(t, T):
-                total += (self.gamma ** t_prime) * rewards[t_prime]
+                total += (self.gamma ** (t_prime - t)) * rewards[t_prime]
             discounted_cumsums[t] = total
         return discounted_cumsums
