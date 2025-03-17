@@ -5,6 +5,7 @@ from rob831.critics.bootstrapped_continuous_critic import \
 from rob831.infrastructure.replay_buffer import ReplayBuffer
 from rob831.infrastructure.utils import *
 from rob831.policies.MLP_policy import MLPPolicyAC
+from rob831.infrastructure import pytorch_util as ptu
 from .base_agent import BaseAgent
 
 
@@ -39,24 +40,48 @@ class ACAgent(BaseAgent):
 
         # for agent_params['num_actor_updates_per_agent_update'] steps,
         #     update the actor
+        
+        ob_no = ptu.from_numpy(ob_no).to(ptu.device)  # Observations (current)
+        ac_na = ptu.from_numpy(ac_na).to(ptu.device)  # Actions (discrete)
+        next_ob_no = ptu.from_numpy(next_ob_no).to(ptu.device)  # Next observations
+        re_n = ptu.from_numpy(re_n).to(ptu.device)  # Rewards
+        terminal_n = ptu.from_numpy(terminal_n).to(ptu.device)  # Terminal flags (0 or 1)
 
+        critic_loss = 0
+        actor_loss = 0
+
+        for _ in range(self.agent_params['num_critic_updates_per_agent_update']):
+            critic_loss += self.critic.update(ob_no, ac_na, next_ob_no, re_n, terminal_n) 
+
+        adv_n = self.estimate_advantage(ob_no, next_ob_no, re_n, terminal_n)
+
+        for _ in range(self.agent_params['num_actor_updates_per_agent_update']):
+            actor_loss += self.actor.update(ob_no, ac_na, adv_n)
+        
         loss = OrderedDict()
-        loss['Loss_Critic'] = TODO
-        loss['Loss_Actor'] = TODO
+        loss['Loss_Critic'] = critic_loss
+        loss['Loss_Actor'] = actor_loss
 
         return loss
 
     def estimate_advantage(self, ob_no, next_ob_no, re_n, terminal_n):
-        # TODO Implement the following pseudocode:
+        # TODO Implement the following pseudocfode:
         # 1) query the critic with ob_no, to get V(s)
         # 2) query the critic with next_ob_no, to get V(s')
         # 3) estimate the Q value as Q(s, a) = r(s, a) + gamma*V(s')
         # HINT: Remember to cut off the V(s') term (ie set it to 0) at terminal states (ie terminal_n=1)
         # 4) calculate advantage (adv_n) as A(s, a) = Q(s, a) - V(s)
-        adv_n = TODO
+
+        v_s = self.critic.forward(ob_no)
+        v_s_prime = self.critic.forward(next_ob_no)
+        
+        q_vals = re_n + self.gamma * v_s_prime * (1 - terminal_n)
+
+        adv_n = q_vals - v_s
 
         if self.standardize_advantages:
-            adv_n = TODO
+            adv_n = normalize(adv_n, adv_n.mean(), adv_n.std())
+            
         return adv_n
 
     def add_to_replay_buffer(self, paths):
