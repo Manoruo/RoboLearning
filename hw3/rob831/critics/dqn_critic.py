@@ -13,7 +13,7 @@ class DQNCritic(BaseCritic):
         super().__init__(**kwargs)
         self.env_name = hparams['env_name']
         self.ob_dim = hparams['ob_dim']
-
+        
         if isinstance(self.ob_dim, int):
             self.input_shape = (self.ob_dim,)
         else:
@@ -57,6 +57,7 @@ class DQNCritic(BaseCritic):
             returns:
                 nothing
         """
+
         ob_no = ptu.from_numpy(ob_no)
         ac_na = ptu.from_numpy(ac_na).to(torch.long)
         next_ob_no = ptu.from_numpy(next_ob_no)
@@ -67,22 +68,28 @@ class DQNCritic(BaseCritic):
         q_t_values = torch.gather(qa_t_values, 1, ac_na.unsqueeze(1)).squeeze(1)
         
         # TODO compute the Q-values from the target network 
-        qa_tp1_values = TODO
-
+        qa_tp1_values = self.q_net_target(next_ob_no)
         if self.double_q:
             # You must fill this part for Q2 of the Q-learning portion of the homework.
             # In double Q-learning, the best action is selected using the Q-network that
             # is being updated, but the Q-value for this action is obtained from the
             # target Q-network. Please review Lecture 8 for more details,
             # and page 4 of https://arxiv.org/pdf/1509.06461.pdf is also a good reference.
-            TODO
+            
+            #  At the next state select the action that our q_net thinks would yields best q value
+            best_actions = self.q_net(next_ob_no).argmax(dim=1, keepdim=True)
+            
+            # Now using our target network, to rank the next state/action pair and choose the q value that our q_net would select
+            # Basically at the next state take the q value (obtained from target net) according to the q_net
+            q_tp1 = torch.gather(qa_tp1_values, 1, best_actions).squeeze(1)
         else:
+            # Similar but take the BEST q value according to the target network
             q_tp1, _ = qa_tp1_values.max(dim=1)
 
         # TODO compute targets for minimizing Bellman error
         # HINT: as you saw in lecture, this would be:
             #currentReward + self.gamma * qValuesOfNextTimestep * (not terminal)
-        target = TODO
+        target = reward_n + self.gamma * q_tp1 * (1 - terminal_n)
         target = target.detach()
 
         assert q_t_values.shape == target.shape
