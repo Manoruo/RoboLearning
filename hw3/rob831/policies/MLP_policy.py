@@ -126,4 +126,20 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
 class MLPPolicyAC(MLPPolicy):
     def update(self, observations, actions, adv_n=None):
         # TODO: update the policy and return the loss
+
+        # Perform a forward pass to get the action distribution
+        action_distribution = self.forward(observations)
+        log_prob = action_distribution.log_prob(actions)
+        
+        if len(log_prob.shape) > 1:
+            log_prob = log_prob.sum(dim=-1)  # Log space this is the equivalent of multiplying the independent probs. Ex: prob of action 1 * prob of action 2
+    
+        # Compute the policy gradient loss
+        # Multiply the log probability by the advantage to get the policy gradient
+        loss = -torch.mean(log_prob * adv_n)  # Using negative sign to perform gradient ascent
+        
+        # Backpropagate the loss
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
         return loss.item()
