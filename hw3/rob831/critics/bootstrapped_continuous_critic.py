@@ -85,6 +85,34 @@ class BootstrappedContinuousCritic(nn.Module, BaseCritic):
         # HINT: don't forget to use terminal_n to cut off the V(s') (ie set it
         #       to 0) when a terminal state is reached
         # HINT: make sure to squeeze the output of the critic_network to ensure
-        #       that its dimensions match the reward
 
-        return loss.item()
+        #       that its dimensions match the reward
+        loss_total = 0
+        
+        for i in range(self.num_target_updates * self.num_grad_steps_per_target_update):
+
+            # Recompute the target values every self.num_grad_steps_per_target_update steps
+            if i % self.num_grad_steps_per_target_update == 0:
+         
+                v_s_prime = self.forward(next_ob_no)  # V(s') -> Q value of next state
+                targets = reward_n + self.gamma * v_s_prime * (1 - terminal_n)  # Compute the Bellman target
+                targets = targets.detach()
+
+            # Every time, update this critic using the observations and targets
+            v_s = self.forward(ob_no)  # V(s) is the q value at the current state, we want this to move towards the target
+            loss = self.loss(v_s, targets)
+
+            # Back propergate
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            
+            # Count the loss
+            loss_total += loss.item()
+           
+                
+
+        # Return the avg loss 
+        return loss_total / (self.num_target_updates * self.num_grad_steps_per_target_update)
+
+       
